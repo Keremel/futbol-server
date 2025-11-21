@@ -1,6 +1,7 @@
 import { WebSocketServer } from "ws";
 
-const wss = new WebSocketServer({ port: 8080 });
+const PORT = process.env.PORT || 8080;
+const wss = new WebSocketServer({ port: PORT });
 
 let lobbies = {};
 
@@ -10,7 +11,12 @@ wss.on("connection", (ws) => {
 
     if (data.action === "createLobby") {
       const lobbyId = Math.random().toString(36).substring(2, 8);
-      lobbies[lobbyId] = { host: ws, guest: null, scores: { host: 0, guest: 0 }, ready: { host: false, guest: false } };
+      lobbies[lobbyId] = {
+        host: ws,
+        guest: null,
+        scores: { host: 0, guest: 0 },
+        ready: { host: false, guest: false }
+      };
 
       ws.send(JSON.stringify({ action: "lobbyCreated", lobbyId }));
     }
@@ -60,3 +66,5 @@ wss.on("connection", (ws) => {
     }
   });
 });
+
+console.log("WebSocket Server running on port:", PORT);
