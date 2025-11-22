@@ -12,10 +12,9 @@ server.listen(PORT, () => {
   console.log("Server ready on port:", PORT);
 });
 
-// --- 🔥 En kritik kısım: path ekliyoruz
+// ❗ Railway için path EKLEME — WS ana kökten çalışır
 const wss = new WebSocketServer({
   server,
-  path: "/ws",
 });
 
 let lobbies = {};
