@@ -14,10 +14,10 @@ server.listen(PORT, () => {
 
 const wss = new WebSocketServer({
   server,
-  path: "/ws",
+  path: "/ws", // Render kullanıyorsan bu doğru, Railway'de path'siz kullanırız
 });
 
-// --- TAKIM VE OYUNCULAR (server tarafında da aynı)
+// --- TAKIM VE OYUNCULAR ---
 const premierLeagueTeams = [
   { name: "Arsenal" },
   { name: "Chelsea" },
@@ -57,6 +57,7 @@ wss.on("connection", (ws) => {
   ws.on("message", (message) => {
     const data = JSON.parse(message);
 
+    // LOBİ OLUŞTUR
     if (data.action === "createLobby") {
       const lobbyId = Math.random().toString(36).substring(2, 8);
       lobbies[lobbyId] = {
@@ -69,6 +70,7 @@ wss.on("connection", (ws) => {
       ws.send(JSON.stringify({ action: "lobbyCreated", lobbyId }));
     }
 
+    // LOBİYE KATIL
     if (data.action === "joinLobby") {
       const lobby = lobbies[data.lobbyId];
       if (!lobby) return;
@@ -86,6 +88,7 @@ wss.on("connection", (ws) => {
 
       lobby.ready[data.role] = true;
 
+      // İstersen UI'da göstermek için
       lobby.host?.send(JSON.stringify({ action: "readyState", ready: lobby.ready }));
       lobby.guest?.send(JSON.stringify({ action: "readyState", ready: lobby.ready }));
 
@@ -116,7 +119,7 @@ wss.on("connection", (ws) => {
       lobby.host?.send(JSON.stringify({ action: "scoreUpdate", scores: lobby.scores }));
       lobby.guest?.send(JSON.stringify({ action: "scoreUpdate", scores: lobby.scores }));
 
-      // Yeni tur = yeni random takımlar
+      // Yeni tur = yeni random takımlar (yine ikisine aynı)
       const round = generateRound();
       lobby.host?.send(JSON.stringify({ action: "nextRound", ...round }));
       lobby.guest?.send(JSON.stringify({ action: "nextRound", ...round }));
