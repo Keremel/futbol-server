@@ -12,21 +12,38 @@ server.listen(PORT, () => {
   console.log("Server ready on port:", PORT);
 });
 
+// Render'da path: "/ws", Railway'de path'siz { server } kullan
 const wss = new WebSocketServer({
   server,
-  path: "/ws", // Render kullanıyorsan bu doğru, Railway'de path'siz kullanırız
+  path: "/ws",
 });
 
 // --- TAKIM VE OYUNCULAR ---
+
 const premierLeagueTeams = [
-  { name: "Arsenal" },
-  { name: "Chelsea" },
-  { name: "Liverpool" },
-  { name: "Manchester City" },
-  { name: "Manchester United" },
-  { name: "Tottenham" },
+  "Arsenal",
+  "Aston Villa",
+  "Bournemouth",
+  "Brentford",
+  "Brighton",
+  "Burnley",
+  "Chelsea",
+  "Crystal Palace",
+  "Everton",
+  "Fulham",
+  "Leeds United",
+  "Liverpool",
+  "Manchester City",
+  "Manchester United",
+  "Newcastle",
+  "Nottingham",
+  "Sunderland",
+  "Tottenham",
+  "West Ham",
+  "Wolves",
 ];
 
+// basit demo oyuncu verisi (istersen sonra gerçek isimlerle doldur)
 const teamPlayers = {
   Arsenal: ["Olivier Giroud", "Alexis Sanchez", "William Gallas"],
   Chelsea: ["Olivier Giroud", "William Gallas", "Juan Mata"],
@@ -34,20 +51,22 @@ const teamPlayers = {
   "Manchester City": ["Raheem Sterling", "James Milner"],
   "Manchester United": ["Alexis Sanchez", "Juan Mata"],
   Tottenham: ["William Gallas"],
+
+  "Aston Villa": ["Player Aston Villa"],
+  Bournemouth: ["Player Bournemouth"],
+  Brentford: ["Player Brentford"],
+  Brighton: ["Player Brighton"],
+  Burnley: ["Player Burnley"],
+  "Crystal Palace": ["Player Crystal Palace"],
+  Everton: ["Player Everton"],
+  Fulham: ["Player Fulham"],
+  "Leeds United": ["Player Leeds"],
+  Newcastle: ["Player Newcastle"],
+  Nottingham: ["Player Nottingham"],
+  Sunderland: ["Player Sunderland"],
+  "West Ham": ["Player West Ham"],
+  Wolves: ["Player Wolves"],
 };
-
-// Ortak oyuncusu olan 2 random takım seç
-function generateRound() {
-  let t1, t2, shared;
-
-  do {
-    t1 = premierLeagueTeams[Math.floor(Math.random() * premierLeagueTeams.length)].name;
-    t2 = premierLeagueTeams[Math.floor(Math.random() * premierLeagueTeams.length)].name;
-    shared = teamPlayers[t1].filter((p) => teamPlayers[t2].includes(p));
-  } while (shared.length === 0 || t1 === t2);
-
-  return { team1: t1, team2: t2 };
-}
 
 let lobbies = {};
 
@@ -57,20 +76,22 @@ wss.on("connection", (ws) => {
   ws.on("message", (message) => {
     const data = JSON.parse(message);
 
-    // LOBİ OLUŞTUR
+    // === LOBİ OLUŞTUR ===
     if (data.action === "createLobby") {
       const lobbyId = Math.random().toString(36).substring(2, 8);
       lobbies[lobbyId] = {
         host: ws,
         guest: null,
         scores: { host: 0, guest: 0 },
-        ready: { host: false, guest: false },
+        lobbyReady: { host: false, guest: false },
+        selectedTeams: { host: null, guest: null },
       };
 
       ws.send(JSON.stringify({ action: "lobbyCreated", lobbyId }));
+      return;
     }
 
-    // LOBİYE KATIL
+    // === LOBİYE KATIL ===
     if (data.action === "joinLobby") {
       const lobby = lobbies[data.lobbyId];
       if (!lobby) return;
@@ -79,50 +100,126 @@ wss.on("connection", (ws) => {
 
       ws.send(JSON.stringify({ action: "joinedLobby" }));
       lobby.host?.send(JSON.stringify({ action: "guestJoined" }));
+      return;
     }
 
-    // HAZIRIM
-    if (data.action === "ready") {
-      const lobby = lobbies[data.lobbyId];
-      if (!lobby) return;
+    const lobby = lobbies[data.lobbyId];
+    if (!lobby) return;
 
-      lobby.ready[data.role] = true;
+    // === LOBİDE HAZIRIM (1. aşama) ===
+    if (data.action === "readyLobby") {
+      lobby.lobbyReady[data.role] = true;
 
-      // İstersen UI'da göstermek için
-      lobby.host?.send(JSON.stringify({ action: "readyState", ready: lobby.ready }));
-      lobby.guest?.send(JSON.stringify({ action: "readyState", ready: lobby.ready }));
+      lobby.host?.send(
+        JSON.stringify({ action: "lobbyReadyState", ready: lobby.lobbyReady })
+      );
+      lobby.guest?.send(
+        JSON.stringify({ action: "lobbyReadyState", ready: lobby.lobbyReady })
+      );
 
-      // İkisi de hazırsa oyunu başlat + aynı takımları gönder
-      if (lobby.ready.host && lobby.ready.guest) {
-        const round = generateRound();
-
-        lobby.host?.send(JSON.stringify({ action: "startGame", ...round }));
-        lobby.guest?.send(JSON.stringify({ action: "startGame", ...round }));
+      if (lobby.lobbyReady.host && lobby.lobbyReady.guest) {
+        lobby.selectedTeams = { host: null, guest: null };
+        lobby.host?.send(
+          JSON.stringify({
+            action: "startTeamSelect",
+            teams: premierLeagueTeams,
+          })
+        );
+        lobby.guest?.send(
+          JSON.stringify({
+            action: "startTeamSelect",
+            teams: premierLeagueTeams,
+          })
+        );
       }
+      return;
     }
 
-    // TAHMİN
+    // === TAKIM SEÇİMİ (2. aşama) ===
+    if (data.action === "selectTeam") {
+      lobby.selectedTeams[data.role] = data.team;
+
+      lobby.host?.send(
+        JSON.stringify({
+          action: "teamSelectionState",
+          selected: lobby.selectedTeams,
+        })
+      );
+      lobby.guest?.send(
+        JSON.stringify({
+          action: "teamSelectionState",
+          selected: lobby.selectedTeams,
+        })
+      );
+
+      if (lobby.selectedTeams.host && lobby.selectedTeams.guest) {
+        const hostTeam = lobby.selectedTeams.host;
+        const guestTeam = lobby.selectedTeams.guest;
+
+        lobby.host?.send(
+          JSON.stringify({
+            action: "startGame",
+            team1: hostTeam,
+            team2: guestTeam,
+          })
+        );
+        lobby.guest?.send(
+          JSON.stringify({
+            action: "startGame",
+            team1: hostTeam,
+            team2: guestTeam,
+          })
+        );
+
+        lobby.lobbyReady = { host: false, guest: false };
+      }
+      return;
+    }
+
+    // === TAHMİN ===
     if (data.action === "guess") {
-      const lobby = lobbies[data.lobbyId];
-      if (!lobby) return;
-
-      if (data.correct) {
-        lobby.scores[data.role]++;
-
-        if (lobby.scores[data.role] >= 3) {
-          lobby.host?.send(JSON.stringify({ action: "gameOver", winner: data.role }));
-          lobby.guest?.send(JSON.stringify({ action: "gameOver", winner: data.role }));
-          return;
-        }
+      if (!data.correct) {
+        // yanlış tahminleri client kendi tutuyor, server sadece doğru olunca ilgileniyor
+        return;
       }
 
-      lobby.host?.send(JSON.stringify({ action: "scoreUpdate", scores: lobby.scores }));
-      lobby.guest?.send(JSON.stringify({ action: "scoreUpdate", scores: lobby.scores }));
+      lobby.scores[data.role]++;
 
-      // Yeni tur = yeni random takımlar (yine ikisine aynı)
-      const round = generateRound();
-      lobby.host?.send(JSON.stringify({ action: "nextRound", ...round }));
-      lobby.guest?.send(JSON.stringify({ action: "nextRound", ...round }));
+      lobby.host?.send(
+        JSON.stringify({ action: "scoreUpdate", scores: lobby.scores })
+      );
+      lobby.guest?.send(
+        JSON.stringify({ action: "scoreUpdate", scores: lobby.scores })
+      );
+
+      if (lobby.scores[data.role] >= 3) {
+        lobby.host?.send(
+          JSON.stringify({ action: "gameOver", winner: data.role })
+        );
+        lobby.guest?.send(
+          JSON.stringify({ action: "gameOver", winner: data.role })
+        );
+        return;
+      }
+
+      // yeni tur için tekrar takım seçimi
+      lobby.selectedTeams = { host: null, guest: null };
+      lobby.lobbyReady = { host: false, guest: false };
+
+      lobby.host?.send(
+        JSON.stringify({
+          action: "startTeamSelect",
+          teams: premierLeagueTeams,
+        })
+      );
+      lobby.guest?.send(
+        JSON.stringify({
+          action: "startTeamSelect",
+          teams: premierLeagueTeams,
+        })
+      );
+
+      return;
     }
   });
 
