@@ -15,7 +15,7 @@ server.listen(PORT, () => {
 // --- 🔥 En kritik kısım: path ekliyoruz
 const wss = new WebSocketServer({
   server,
-  path: "/",
+  path: "/ws",
 });
 
 let lobbies = {};
