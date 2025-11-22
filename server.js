@@ -14,7 +14,40 @@ server.listen(PORT, () => {
 
 const wss = new WebSocketServer({
   server,
+  path: "/ws",
 });
+
+// --- TAKIM VE OYUNCULAR (server tarafında da aynı)
+const premierLeagueTeams = [
+  { name: "Arsenal" },
+  { name: "Chelsea" },
+  { name: "Liverpool" },
+  { name: "Manchester City" },
+  { name: "Manchester United" },
+  { name: "Tottenham" },
+];
+
+const teamPlayers = {
+  Arsenal: ["Olivier Giroud", "Alexis Sanchez", "William Gallas"],
+  Chelsea: ["Olivier Giroud", "William Gallas", "Juan Mata"],
+  Liverpool: ["Raheem Sterling", "James Milner"],
+  "Manchester City": ["Raheem Sterling", "James Milner"],
+  "Manchester United": ["Alexis Sanchez", "Juan Mata"],
+  Tottenham: ["William Gallas"],
+};
+
+// Ortak oyuncusu olan 2 random takım seç
+function generateRound() {
+  let t1, t2, shared;
+
+  do {
+    t1 = premierLeagueTeams[Math.floor(Math.random() * premierLeagueTeams.length)].name;
+    t2 = premierLeagueTeams[Math.floor(Math.random() * premierLeagueTeams.length)].name;
+    shared = teamPlayers[t1].filter((p) => teamPlayers[t2].includes(p));
+  } while (shared.length === 0 || t1 === t2);
+
+  return { team1: t1, team2: t2 };
+}
 
 let lobbies = {};
 
@@ -46,25 +79,26 @@ wss.on("connection", (ws) => {
       lobby.host?.send(JSON.stringify({ action: "guestJoined" }));
     }
 
-    // 🔥 HAZIRIM LOGİĞİ BURADA
+    // HAZIRIM
     if (data.action === "ready") {
       const lobby = lobbies[data.lobbyId];
       if (!lobby) return;
 
-      // host / guest hangisiyse onu true yap
       lobby.ready[data.role] = true;
 
-      // İki tarafa da hazır durumunu gönder (istersen UI'da kullanırsın)
       lobby.host?.send(JSON.stringify({ action: "readyState", ready: lobby.ready }));
       lobby.guest?.send(JSON.stringify({ action: "readyState", ready: lobby.ready }));
 
-      // 🔥 Eğer hem host hem guest hazırsa oyunu başlat
+      // İkisi de hazırsa oyunu başlat + aynı takımları gönder
       if (lobby.ready.host && lobby.ready.guest) {
-        lobby.host?.send(JSON.stringify({ action: "startGame" }));
-        lobby.guest?.send(JSON.stringify({ action: "startGame" }));
+        const round = generateRound();
+
+        lobby.host?.send(JSON.stringify({ action: "startGame", ...round }));
+        lobby.guest?.send(JSON.stringify({ action: "startGame", ...round }));
       }
     }
 
+    // TAHMİN
     if (data.action === "guess") {
       const lobby = lobbies[data.lobbyId];
       if (!lobby) return;
@@ -82,8 +116,10 @@ wss.on("connection", (ws) => {
       lobby.host?.send(JSON.stringify({ action: "scoreUpdate", scores: lobby.scores }));
       lobby.guest?.send(JSON.stringify({ action: "scoreUpdate", scores: lobby.scores }));
 
-      lobby.host?.send(JSON.stringify({ action: "nextRound" }));
-      lobby.guest?.send(JSON.stringify({ action: "nextRound" }));
+      // Yeni tur = yeni random takımlar
+      const round = generateRound();
+      lobby.host?.send(JSON.stringify({ action: "nextRound", ...round }));
+      lobby.guest?.send(JSON.stringify({ action: "nextRound", ...round }));
     }
   });
 
