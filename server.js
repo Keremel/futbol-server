@@ -12,7 +12,6 @@ server.listen(PORT, () => {
   console.log("Server ready on port:", PORT);
 });
 
-// ❗ Railway için path EKLEME — WS ana kökten çalışır
 const wss = new WebSocketServer({
   server,
 });
@@ -44,41 +43,47 @@ wss.on("connection", (ws) => {
       lobby.guest = ws;
 
       ws.send(JSON.stringify({ action: "joinedLobby" }));
-      lobby.host.send(JSON.stringify({ action: "guestJoined" }));
+      lobby.host?.send(JSON.stringify({ action: "guestJoined" }));
     }
 
+    // 🔥 HAZIRIM LOGİĞİ BURADA
     if (data.action === "ready") {
       const lobby = lobbies[data.lobbyId];
+      if (!lobby) return;
+
+      // host / guest hangisiyse onu true yap
       lobby.ready[data.role] = true;
 
-      lobby.host.send(JSON.stringify({ action: "readyState", ready: lobby.ready }));
+      // İki tarafa da hazır durumunu gönder (istersen UI'da kullanırsın)
+      lobby.host?.send(JSON.stringify({ action: "readyState", ready: lobby.ready }));
       lobby.guest?.send(JSON.stringify({ action: "readyState", ready: lobby.ready }));
-    }
 
-    if (data.action === "triggerStart") {
-      const lobby = lobbies[data.lobbyId];
-      lobby.host.send(JSON.stringify({ action: "startGame" }));
-      lobby.guest.send(JSON.stringify({ action: "startGame" }));
+      // 🔥 Eğer hem host hem guest hazırsa oyunu başlat
+      if (lobby.ready.host && lobby.ready.guest) {
+        lobby.host?.send(JSON.stringify({ action: "startGame" }));
+        lobby.guest?.send(JSON.stringify({ action: "startGame" }));
+      }
     }
 
     if (data.action === "guess") {
       const lobby = lobbies[data.lobbyId];
+      if (!lobby) return;
 
       if (data.correct) {
         lobby.scores[data.role]++;
 
         if (lobby.scores[data.role] >= 3) {
-          lobby.host.send(JSON.stringify({ action: "gameOver", winner: data.role }));
-          lobby.guest.send(JSON.stringify({ action: "gameOver", winner: data.role }));
+          lobby.host?.send(JSON.stringify({ action: "gameOver", winner: data.role }));
+          lobby.guest?.send(JSON.stringify({ action: "gameOver", winner: data.role }));
           return;
         }
       }
 
-      lobby.host.send(JSON.stringify({ action: "scoreUpdate", scores: lobby.scores }));
-      lobby.guest.send(JSON.stringify({ action: "scoreUpdate", scores: lobby.scores }));
+      lobby.host?.send(JSON.stringify({ action: "scoreUpdate", scores: lobby.scores }));
+      lobby.guest?.send(JSON.stringify({ action: "scoreUpdate", scores: lobby.scores }));
 
-      lobby.host.send(JSON.stringify({ action: "nextRound" }));
-      lobby.guest.send(JSON.stringify({ action: "nextRound" }));
+      lobby.host?.send(JSON.stringify({ action: "nextRound" }));
+      lobby.guest?.send(JSON.stringify({ action: "nextRound" }));
     }
   });
 
