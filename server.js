@@ -3,25 +3,25 @@ import http from "http";
 
 const PORT = process.env.PORT || 8080;
 
-// HTTP server
-const server = http.createServer();
+const server = http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end("WebSocket server is running.\n");
+});
+
 server.listen(PORT, () => {
   console.log("Server ready on port:", PORT);
 });
 
-// WebSocket server
-const wss = new WebSocketServer({ server });
+// --- 🔥 En kritik kısım: path ekliyoruz
+const wss = new WebSocketServer({
+  server,
+  path: "/",
+});
 
 let lobbies = {};
 
-// ---- KEEP ALIVE ----
-function heartbeat() {
-  this.isAlive = true;
-}
-
 wss.on("connection", (ws) => {
-  ws.isAlive = true;
-  ws.on("pong", heartbeat);   // client "pong" gönderince alive kabul ediliyor
+  console.log("Client connected");
 
   ws.on("message", (message) => {
     const data = JSON.parse(message);
@@ -32,7 +32,7 @@ wss.on("connection", (ws) => {
         host: ws,
         guest: null,
         scores: { host: 0, guest: 0 },
-        ready: { host: false, guest: false }
+        ready: { host: false, guest: false },
       };
 
       ws.send(JSON.stringify({ action: "lobbyCreated", lobbyId }));
@@ -43,6 +43,7 @@ wss.on("connection", (ws) => {
       if (!lobby) return;
 
       lobby.guest = ws;
+
       ws.send(JSON.stringify({ action: "joinedLobby" }));
       lobby.host.send(JSON.stringify({ action: "guestJoined" }));
     }
@@ -55,11 +56,17 @@ wss.on("connection", (ws) => {
       lobby.guest?.send(JSON.stringify({ action: "readyState", ready: lobby.ready }));
     }
 
+    if (data.action === "triggerStart") {
+      const lobby = lobbies[data.lobbyId];
+      lobby.host.send(JSON.stringify({ action: "startGame" }));
+      lobby.guest.send(JSON.stringify({ action: "startGame" }));
+    }
+
     if (data.action === "guess") {
       const lobby = lobbies[data.lobbyId];
 
       if (data.correct) {
-        lobby.scores[data.role] += 1;
+        lobby.scores[data.role]++;
 
         if (lobby.scores[data.role] >= 3) {
           lobby.host.send(JSON.stringify({ action: "gameOver", winner: data.role }));
@@ -77,15 +84,6 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    ws.isAlive = false;
+    console.log("Client disconnected");
   });
 });
-
-// ---- PING at ----
-setInterval(() => {
-  wss.clients.forEach((ws) => {
-    if (!ws.isAlive) return ws.terminate();  // cevap yoksa bağlantı öldür
-    ws.isAlive = false;
-    ws.ping();   // ping gönderiyoruz (client otomatik olarak pong yollar)
-  });
-}, 25000); // Railway için ideal: 25 saniye
