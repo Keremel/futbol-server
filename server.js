@@ -3,13 +3,13 @@ import http from "http";
 
 const PORT = process.env.PORT || 8080;
 
-// Basit bir HTTP server (Railway bunu istiyor)
-const server = http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end("WebSocket Server is running.");
+// HTTP server oluştur
+const server = http.createServer();
+server.listen(PORT, () => {
+  console.log("Server ready on port:", PORT);
 });
 
-// WebSocket serverı HTTP server'a bağla
+// WebSocket serverı HTTP server üzerine kur
 const wss = new WebSocketServer({ server });
 
 let lobbies = {};
@@ -74,8 +74,4 @@ wss.on("connection", (ws) => {
       lobby.guest.send(JSON.stringify({ action: "nextRound" }));
     }
   });
-});
-
-server.listen(PORT, () => {
-  console.log("Server ready on port:", PORT);
 });
